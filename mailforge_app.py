@@ -1,68 +1,102 @@
-from flask import Flask, render_template_string, request, flash, redirect
+from flask import Flask, render_template_string, request
 import smtplib
+from email.mime.text import MIMEText
 import os
+import threading
 
 app = Flask(__name__)
-app.secret_key = "secret-key"
 
 HTML = """
 <!DOCTYPE html>
 <html>
 <head>
-    <title>MailForge</title>
+    <title>MailForge Pro</title>
+    <style>
+        body { font-family: Arial; margin: 20px; }
+        .tab { display: none; border: 1px solid #ccc; padding: 15px; margin-top: 10px; }
+        .active { display: block; }
+        button { margin: 5px; padding: 10px; }
+        input, textarea { width: 300px; margin: 5px 0; }
+    </style>
 </head>
 <body>
-    <h2>MailForge Email Sender</h2>
 
+<h2>📧 MailForge Pro</h2>
+
+<div>
+    <button onclick="showTab('send')">Send Email</button>
+</div>
+
+<div id="send" class="tab active">
+    <h3>Send Email</h3>
     <form method="POST">
-        <input name="email" placeholder="Recipient Email" required><br><br>
-        <input name="subject" placeholder="Subject" required><br><br>
-        <textarea name="message" placeholder="Message" required></textarea><br><br>
-        <button type="submit">Send Email</button>
+        <input name="recipient" placeholder="Recipient Email" required><br>
+        <input name="subject" placeholder="Subject" required><br>
+        <textarea name="message" placeholder="Message" required></textarea><br>
+        <button type="submit">Send</button>
     </form>
+</div>
 
-    <p>{{ msg }}</p>
+<script>
+function showTab(id) {
+    document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+    document.getElementById(id).classList.add('active');
+}
+</script>
+
 </body>
 </html>
 """
 
 
-def send_email(to_email, subject, message):
-    sender_email = os.getenv("EMAIL_ADDRESS")
-    app_password = os.getenv("EMAIL_PASSWORD")
-
-    if not sender_email or not app_password:
-        return "Missing environment variables"
-
+# 🔥 EMAIL SENDER (RUNS IN BACKGROUND)
+def send_email_async(recipient, subject, message):
     try:
-        server = smtplib.SMTP("smtp.gmail.com", 587, timeout=10)
-        server.starttls()
-        server.login(sender_email, app_password)
+        sender = os.environ.get("EMAIL_USER")
+        password = os.environ.get("EMAIL_PASS")
 
-        full_msg = f"Subject: {subject}\n\n{message}"
-        server.sendmail(sender_email, to_email, full_msg)
+        if not sender or not password:
+            print("ENV VARIABLES MISSING")
+            return
+
+        msg = MIMEText(message)
+        msg["Subject"] = subject
+        msg["From"] = sender
+        msg["To"] = recipient
+
+        server = smtplib.SMTP("smtp.gmail.com", 587, timeout=20)
+        server.ehlo()
+        server.starttls()
+        server.ehlo()
+
+        server.login(sender, password)
+        server.send_message(msg)
         server.quit()
 
-        return "Email sent successfully"
+        print("EMAIL SENT SUCCESSFULLY ✔")
 
     except Exception as e:
-        return f"Error: {str(e)}"
+        print("EMAIL ERROR:", e)
 
 
 @app.route("/", methods=["GET", "POST"])
 def home():
-    msg = ""
-
     if request.method == "POST":
-        email = request.form["email"]
+        recipient = request.form["recipient"]
         subject = request.form["subject"]
         message = request.form["message"]
 
-        # IMPORTANT: no blocking outside function
-        msg = send_email(email, subject, message)
+        # 🚀 RUN IN BACKGROUND (NO TIMEOUT)
+        threading.Thread(
+            target=send_email_async,
+            args=(recipient, subject, message)
+        ).start()
 
-    return render_template_string(HTML, msg=msg)
+        return render_template_string(HTML)
+
+    return render_template_string(HTML)
 
 
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=5000)
+    port = int(os.environ.get("PORT", 5000))
+    app.run(host="0.0.0.0", port=port)
