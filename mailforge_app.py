@@ -1,4 +1,6 @@
 from flask import Flask, render_template_string, request
+import smtplib
+from email.mime.text import MIMEText
 
 app = Flask(__name__)
 
@@ -71,13 +73,30 @@ def home():
         subject = request.form["subject"]
         message = request.form["message"]
 
-        print("SENDING EMAIL:")
-        print(sender, recipient, subject, message)
+        try:
+            msg = MIMEText(message)
+            msg["Subject"] = subject
+            msg["From"] = sender
+            msg["To"] = recipient
 
-        return render_template_string(HTML, sent=True)
+            server = smtplib.SMTP("smtp.gmail.com", 587)
+            server.starttls()
 
-    return render_template_string(HTML, sent=False)
+            # 🔴 PUT YOUR APP PASSWORD HERE
+            server.login(sender, "ufduwsascxlbajoc")
 
+            server.send_message(msg)
+            server.quit()
+
+            print("EMAIL SENT SUCCESSFULLY")
+
+            return render_template_string(HTML, sent=True)
+
+        except Exception as e:
+            print("ERROR:", e)
+            return render_template_string(HTML, sent=False)
+
+    return render_template_string(HTML)
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=5000)
