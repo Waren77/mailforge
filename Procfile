@@ -1,0 +1,1 @@
+web: gunicorn mailforge_app:app
