@@ -1,6 +1,8 @@
 from flask import Flask, render_template_string, request
 import smtplib
 from email.mime.text import MIMEText
+import os
+import threading
 
 app = Flask(__name__)
 
@@ -11,53 +13,34 @@ HTML = """
     <title>MailForge Pro</title>
     <style>
         body { font-family: Arial; margin: 20px; }
-        .tab { display: none; padding: 10px; border: 1px solid #ccc; margin-top: 10px; }
+        .tab { display: none; border: 1px solid #ccc; padding: 15px; margin-top: 10px; }
         .active { display: block; }
         button { margin: 5px; padding: 10px; }
+        input, textarea { width: 300px; margin: 5px 0; }
     </style>
 </head>
-
 <body>
 
 <h2>📧 MailForge Pro</h2>
 
-<button onclick="showTab('send')">Send Email</button>
-<button onclick="showTab('gen')">Generate Email</button>
-<button onclick="showTab('bulk')">Bulk Email</button>
+<div>
+    <button onclick="showTab('send')">Send Email</button>
+</div>
 
-<!-- SEND EMAIL -->
 <div id="send" class="tab active">
     <h3>Send Email</h3>
     <form method="POST">
-        <input name="sender" placeholder="Sender Email"><br><br>
-        <input name="recipient" placeholder="Recipient Email"><br><br>
-        <input name="subject" placeholder="Subject"><br><br>
-        <textarea name="message" placeholder="Message"></textarea><br><br>
+        <input name="recipient" placeholder="Recipient Email" required><br>
+        <input name="subject" placeholder="Subject" required><br>
+        <textarea name="message" placeholder="Message" required></textarea><br>
         <button type="submit">Send</button>
     </form>
 </div>
 
-<!-- GENERATOR -->
-<div id="gen" class="tab">
-    <h3>Email Generator</h3>
-    <p>Type a prompt:</p>
-    <textarea placeholder="e.g. Write a professional apology email"></textarea><br><br>
-    <button>Generate</button>
-</div>
-
-<!-- BULK -->
-<div id="bulk" class="tab">
-    <h3>Bulk Email</h3>
-    <p>Upload CSV (coming next step)</p>
-    <input type="file"><br><br>
-    <button>Send Bulk</button>
-</div>
-
 <script>
-function showTab(tabId) {
-    let tabs = document.querySelectorAll('.tab');
-    tabs.forEach(t => t.classList.remove('active'));
-    document.getElementById(tabId).classList.add('active');
+function showTab(id) {
+    document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+    document.getElementById(id).classList.add('active');
 }
 </script>
 
@@ -65,38 +48,55 @@ function showTab(tabId) {
 </html>
 """
 
+
+# 🔥 EMAIL SENDER (RUNS IN BACKGROUND)
+def send_email_async(recipient, subject, message):
+    try:
+        sender = os.environ.get("EMAIL_USER")
+        password = os.environ.get("EMAIL_PASS")
+
+        if not sender or not password:
+            print("ENV VARIABLES MISSING")
+            return
+
+        msg = MIMEText(message)
+        msg["Subject"] = subject
+        msg["From"] = sender
+        msg["To"] = recipient
+
+        server = smtplib.SMTP("smtp.gmail.com", 587, timeout=20)
+        server.ehlo()
+        server.starttls()
+        server.ehlo()
+
+        server.login(sender, password)
+        server.send_message(msg)
+        server.quit()
+
+        print("EMAIL SENT SUCCESSFULLY ✔")
+
+    except Exception as e:
+        print("EMAIL ERROR:", e)
+
+
 @app.route("/", methods=["GET", "POST"])
 def home():
     if request.method == "POST":
-        sender = request.form["sender"]
         recipient = request.form["recipient"]
         subject = request.form["subject"]
         message = request.form["message"]
 
-        try:
-            msg = MIMEText(message)
-            msg["Subject"] = subject
-            msg["From"] = sender
-            msg["To"] = recipient
+        # 🚀 RUN IN BACKGROUND (NO TIMEOUT)
+        threading.Thread(
+            target=send_email_async,
+            args=(recipient, subject, message)
+        ).start()
 
-            server = smtplib.SMTP("smtp.gmail.com", 587)
-            server.starttls()
-
-            # 🔴 PUT YOUR APP PASSWORD HERE
-            server.login(sender, "ufduwsascxlbajoc")
-
-            server.send_message(msg)
-            server.quit()
-
-            print("EMAIL SENT SUCCESSFULLY")
-
-            return render_template_string(HTML, sent=True)
-
-        except Exception as e:
-            print("ERROR:", e)
-            return render_template_string(HTML, sent=False)
+        return render_template_string(HTML)
 
     return render_template_string(HTML)
 
+
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=5000)
+    port = int(os.environ.get("PORT", 5000))
+    app.run(host="0.0.0.0", port=port)
