@@ -1,44 +1,54 @@
-from flask import Flask, request, render_template_string
-import smtplib
-import os
+from flask import Flask, render_template_string, request
 
 app = Flask(__name__)
 
 HTML = """
-<h2>🚀 MailForge</h2>
+<!DOCTYPE html>
+<html>
+<head>
+    <title>MailForge</title>
+</head>
+<body>
+    <h2>MailForge Email Sender</h2>
 
-<form method="POST">
-    <input name="to" placeholder="Recipient Email"><br><br>
-    <input name="subject" placeholder="Subject"><br><br>
-    <textarea name="message" placeholder="Message"></textarea><br><br>
-    <button type="submit">Send Email</button>
-</form>
+    <form method="POST">
+        <label>Sender Email:</label><br>
+        <input name="sender" required><br><br>
+
+        <label>Recipient Email:</label><br>
+        <input name="recipient" required><br><br>
+
+        <label>Subject:</label><br>
+        <input name="subject" required><br><br>
+
+        <label>Message:</label><br>
+        <textarea name="message" required></textarea><br><br>
+
+        <button type="submit">Send Email</button>
+    </form>
+
+    {% if sent %}
+        <p style="color:green;">Email prepared successfully (demo mode)</p>
+    {% endif %}
+</body>
+</html>
 """
 
 @app.route("/", methods=["GET", "POST"])
 def home():
     if request.method == "POST":
-        to = request.form["to"]
+        sender = request.form["sender"]
+        recipient = request.form["recipient"]
         subject = request.form["subject"]
         message = request.form["message"]
-        
-        sender_email = "YOUR_EMAIL@gmail.com"
-        password = "YOUR_APP_PASSWORD"
 
-        text = f"Subject: {subject}\n\n{message}"
+        print("SENDING EMAIL:")
+        print(sender, recipient, subject, message)
 
-        try:
-            server = smtplib.SMTP("smtp.gmail.com", 587)
-            server.starttls()
-            server.login(sender_email, password)
-            server.sendmail(sender_email, to, text)
-            server.quit()
-            return "<h3>Email sent successfully 🚀</h3>"
-        except Exception as e:
-            return f"<h3>Error: {str(e)}</h3>"
+        return render_template_string(HTML, sent=True)
 
-    return render_template_string(HTML)
+    return render_template_string(HTML, sent=False)
 
 
 if __name__ == "__main__":
-    app.run(debug=True)
+    app.run(host="0.0.0.0", port=5000)
